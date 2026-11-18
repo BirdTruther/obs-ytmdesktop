@@ -26,7 +26,9 @@ constexpr char kAppName[] = "OBS YTMDesktop Sync";
 constexpr char kAppVersion[] = "1.0.0";
 constexpr int kPollIntervalMs = 3000;
 constexpr int kMaxBackoffMs = 10000;
+#ifdef _WIN32
 constexpr int kMaxThumbnailBytes = 5 * 1024 * 1024;
+#endif
 
 #ifdef _WIN32
 QByteArray downloadBytesWinHttp(const QString &urlStr)

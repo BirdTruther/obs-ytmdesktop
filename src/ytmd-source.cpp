@@ -357,7 +357,7 @@ obs_properties_t *ytmd_get_properties(void *data)
 	obs_properties_add_text(props, kPropHost, obs_module_text("Host"), OBS_TEXT_DEFAULT);
 	obs_properties_add_int(props, kPropPort, obs_module_text("Port"), 1, 65535, 1);
 	obs_properties_add_text(props, kPropToken, obs_module_text("Token"), OBS_TEXT_PASSWORD);
-	obs_properties_add_button(props, kPropPairBtn, obs_module_text("PairButton"), on_pair_clicked);
+	obs_properties_add_button2(props, kPropPairBtn, obs_module_text("PairButton"), on_pair_clicked, data);
 
 	auto *src = static_cast<YtmdSource *>(data);
 	QString status = QStringLiteral("Initializing...");
