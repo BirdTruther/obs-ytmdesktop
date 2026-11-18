@@ -26,6 +26,7 @@ constexpr char kAppName[] = "OBS YTMDesktop Sync";
 constexpr char kAppVersion[] = "1.0.0";
 constexpr int kPollIntervalMs = 3000;
 constexpr int kMaxBackoffMs = 10000;
+constexpr int kMaxThumbnailBytes = 5 * 1024 * 1024;
 
 #ifdef _WIN32
 QByteArray downloadBytesWinHttp(const QString &urlStr)
@@ -45,12 +46,16 @@ QByteArray downloadBytesWinHttp(const QString &urlStr)
 	if (!WinHttpCrackUrl(wUrl.c_str(), static_cast<DWORD>(wUrl.length()), 0, &uc)) {
 		return result;
 	}
+	if (uc.nScheme != INTERNET_SCHEME_HTTPS && uc.nScheme != INTERNET_SCHEME_HTTP) {
+		return result;
+	}
 
 	HINTERNET hSession = WinHttpOpen(L"obs-ytmdesktop/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
 					 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (!hSession) {
 		return result;
 	}
+	WinHttpSetTimeouts(hSession, 3000, 3000, 3000, 5000);
 
 	HINTERNET hConnect = WinHttpConnect(hSession, hostBuf, uc.nPort, 0);
 	if (!hConnect) {
@@ -67,6 +72,11 @@ QByteArray downloadBytesWinHttp(const QString &urlStr)
 		    WinHttpReceiveResponse(hRequest, nullptr)) {
 			DWORD avail = 0;
 			while (WinHttpQueryDataAvailable(hRequest, &avail) && avail > 0) {
+				if (avail > static_cast<DWORD>(kMaxThumbnailBytes) ||
+				    result.size() + static_cast<int>(avail) > kMaxThumbnailBytes) {
+					result.clear();
+					break;
+				}
 				const int oldSize = result.size();
 				result.resize(oldSize + static_cast<int>(avail));
 				DWORD read = 0;

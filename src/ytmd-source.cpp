@@ -305,7 +305,10 @@ void *ytmd_create(obs_data_t *settings, obs_source_t *source)
 void ytmd_destroy(void *data)
 {
 	auto *src = static_cast<YtmdSource *>(data);
-	src->client.reset();
+	if (src->client) {
+		src->client->setTokenCallback(nullptr);
+		src->client.reset();
+	}
 	if (src->texture) {
 		obs_enter_graphics();
 		gs_texture_destroy(src->texture);
