@@ -11,12 +11,80 @@
 #include <QNetworkRequest>
 #include <QTimer>
 #include <QUrl>
+#include <algorithm>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <winhttp.h>
+#endif
 
 namespace {
 constexpr char kAppId[] = "obs-ytmdesktop";
 constexpr char kAppName[] = "OBS YTMDesktop Sync";
 constexpr char kAppVersion[] = "1.0.0";
-constexpr int kPollIntervalMs = 750;
+constexpr int kPollIntervalMs = 3000;
+constexpr int kMaxBackoffMs = 10000;
+
+#ifdef _WIN32
+QByteArray downloadBytesWinHttp(const QString &urlStr)
+{
+	QByteArray result;
+	const std::wstring wUrl = urlStr.toStdWString();
+
+	URL_COMPONENTS uc = {};
+	uc.dwStructSize = sizeof(uc);
+	wchar_t hostBuf[256] = {};
+	wchar_t pathBuf[2048] = {};
+	uc.lpszHostName = hostBuf;
+	uc.dwHostNameLength = _countof(hostBuf);
+	uc.lpszUrlPath = pathBuf;
+	uc.dwUrlPathLength = _countof(pathBuf);
+
+	if (!WinHttpCrackUrl(wUrl.c_str(), static_cast<DWORD>(wUrl.length()), 0, &uc)) {
+		return result;
+	}
+
+	HINTERNET hSession = WinHttpOpen(L"obs-ytmdesktop/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+					 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+	if (!hSession) {
+		return result;
+	}
+
+	HINTERNET hConnect = WinHttpConnect(hSession, hostBuf, uc.nPort, 0);
+	if (!hConnect) {
+		WinHttpCloseHandle(hSession);
+		return result;
+	}
+
+	const DWORD flags = (uc.nScheme == INTERNET_SCHEME_HTTPS) ? WINHTTP_FLAG_SECURE : 0;
+	HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", pathBuf, nullptr,
+						WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+	if (hRequest) {
+		if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+				       WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+		    WinHttpReceiveResponse(hRequest, nullptr)) {
+			DWORD avail = 0;
+			while (WinHttpQueryDataAvailable(hRequest, &avail) && avail > 0) {
+				const int oldSize = result.size();
+				result.resize(oldSize + static_cast<int>(avail));
+				DWORD read = 0;
+				if (!WinHttpReadData(hRequest, result.data() + oldSize, avail, &read)) {
+					result.clear();
+					break;
+				}
+				result.resize(oldSize + static_cast<int>(read));
+			}
+		}
+		WinHttpCloseHandle(hRequest);
+	}
+
+	WinHttpCloseHandle(hConnect);
+	WinHttpCloseHandle(hSession);
+	return result;
+}
+#endif
 } // namespace
 
 YtmdWorker::YtmdWorker(QObject *parent) : QObject(parent) {}
@@ -79,15 +147,33 @@ void YtmdWorker::pollState()
 
 		const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 		if (reply->error() != QNetworkReply::NoError) {
+			if (httpStatus == 429) {
+				// Rate-limited: back off quietly without clearing current track
+				if (m_timer) {
+					const int nextMs = std::min(m_timer->interval() + 2000, kMaxBackoffMs);
+					m_timer->setInterval(nextMs);
+				}
+				return;
+			}
+
+			m_consecutiveErrors++;
 			if (httpStatus == 401 || httpStatus == 403) {
 				emit statusChanged(QStringLiteral("Unauthorized — click 'Pair with YTMDesktop'"));
-			} else {
+				YtmdTrackInfo empty;
+				empty.valid = false;
+				emit stateUpdated(empty, QDateTime::currentMSecsSinceEpoch());
+			} else if (m_consecutiveErrors >= 3) {
 				emit statusChanged(QStringLiteral("Disconnected (%1)").arg(reply->errorString()));
+				YtmdTrackInfo empty;
+				empty.valid = false;
+				emit stateUpdated(empty, QDateTime::currentMSecsSinceEpoch());
 			}
-			YtmdTrackInfo empty;
-			empty.valid = false;
-			emit stateUpdated(empty, QDateTime::currentMSecsSinceEpoch());
 			return;
+		}
+
+		m_consecutiveErrors = 0;
+		if (m_timer && m_timer->interval() != kPollIntervalMs) {
+			m_timer->setInterval(kPollIntervalMs);
 		}
 
 		const QByteArray body = reply->readAll();
@@ -137,10 +223,19 @@ void YtmdWorker::pollState()
 
 void YtmdWorker::fetchThumbnail(const QString &url)
 {
+	m_lastThumbnailUrl = url;
+#ifdef _WIN32
+	const QByteArray data = downloadBytesWinHttp(url);
+	if (!data.isEmpty()) {
+		QImage img;
+		if (img.loadFromData(data)) {
+			emit albumArtUpdated(url, img.convertToFormat(QImage::Format_RGBA8888));
+		}
+	}
+#else
 	if (!m_nam) {
 		return;
 	}
-	m_lastThumbnailUrl = url;
 	QNetworkRequest req{QUrl(url)};
 	req.setTransferTimeout(5000);
 	QNetworkReply *reply = m_nam->get(req);
@@ -155,6 +250,7 @@ void YtmdWorker::fetchThumbnail(const QString &url)
 			emit albumArtUpdated(url, img.convertToFormat(QImage::Format_RGBA8888));
 		}
 	});
+#endif
 }
 
 void YtmdWorker::startPairing()

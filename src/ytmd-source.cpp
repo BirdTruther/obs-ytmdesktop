@@ -294,6 +294,7 @@ void *ytmd_create(obs_data_t *settings, obs_source_t *source)
 		obs_data_set_string(s, kPropToken, newToken.toUtf8().constData());
 		obs_source_update(source, s);
 		obs_data_release(s);
+		obs_source_update_properties(source);
 	});
 
 	ytmd_update(src, settings);

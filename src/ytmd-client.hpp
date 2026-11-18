@@ -66,6 +66,7 @@ private:
 	QString m_lastThumbnailUrl;
 	bool m_pollInFlight = false;
 	bool m_pairingInFlight = false;
+	int m_consecutiveErrors = 0;
 };
 
 class YtmdClient : public QObject {
