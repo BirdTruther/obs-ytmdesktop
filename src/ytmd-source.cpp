@@ -87,6 +87,10 @@ struct YtmdSource {
 	int lastProgressPx = -1;
 	bool visible = true;
 
+	QString lastVideoId;
+	double lastPolledProgress = -1.0;
+	double smoothElapsed = 0.0;
+
 	void renderCard(const YtmdSnapshot &snap, double elapsedSec)
 	{
 		const int w = static_cast<int>(width);
@@ -401,7 +405,7 @@ uint32_t ytmd_get_height(void *data)
 	return src->height;
 }
 
-void ytmd_video_tick(void *data, float)
+void ytmd_video_tick(void *data, float seconds)
 {
 	auto *src = static_cast<YtmdSource *>(data);
 	if (!src->client) {
@@ -414,16 +418,39 @@ void ytmd_video_tick(void *data, float)
 		return;
 	}
 
-	double elapsed = snap.track.videoProgress;
-	if (snap.track.valid && snap.track.trackState == 1 && snap.lastPollMs > 0) {
-		const qint64 dtMs = QDateTime::currentMSecsSinceEpoch() - snap.lastPollMs;
-		if (dtMs > 0 && dtMs < 5000) {
-			elapsed += static_cast<double>(dtMs) / 1000.0;
+	if (!snap.track.valid) {
+		src->lastVideoId.clear();
+		src->lastPolledProgress = -1.0;
+		src->smoothElapsed = 0.0;
+	} else {
+		const bool trackChanged = (snap.track.videoId != src->lastVideoId);
+		const bool pollChanged = std::abs(snap.track.videoProgress - src->lastPolledProgress) > 0.01;
+
+		if (trackChanged) {
+			src->lastVideoId = snap.track.videoId;
+			src->lastPolledProgress = snap.track.videoProgress;
+			src->smoothElapsed = snap.track.videoProgress;
+		} else if (pollChanged) {
+			src->lastPolledProgress = snap.track.videoProgress;
+			const double diff = snap.track.videoProgress - src->smoothElapsed;
+			// Snap on real seek (>3.5s behind) or if ahead; ignore small stale dips
+			if (diff > 0.5 || diff < -3.5 || snap.track.trackState != 1) {
+				src->smoothElapsed = snap.track.videoProgress;
+			}
+		}
+
+		if (snap.track.trackState == 1) {
+			src->smoothElapsed += static_cast<double>(seconds);
+		} else {
+			src->smoothElapsed = snap.track.videoProgress;
+		}
+
+		if (snap.track.durationSeconds > 0.0) {
+			src->smoothElapsed = std::clamp(src->smoothElapsed, 0.0, snap.track.durationSeconds);
 		}
 	}
-	if (snap.track.durationSeconds > 0.0) {
-		elapsed = std::clamp(elapsed, 0.0, snap.track.durationSeconds);
-	}
+
+	const double elapsed = src->smoothElapsed;
 
 	const int currentSec = static_cast<int>(std::floor(elapsed));
 	const int progressPx = (snap.track.durationSeconds > 0.0)
