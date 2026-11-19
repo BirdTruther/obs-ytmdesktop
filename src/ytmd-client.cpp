@@ -213,7 +213,7 @@ void YtmdWorker::pollState()
 		QString bestThumb;
 		int bestWidth = -1;
 		const QJsonArray thumbs = video.value(QStringLiteral("thumbnails")).toArray();
-		for (const QJsonValue &val : thumbs) {
+		for (const QJsonValue val : thumbs) {
 			const QJsonObject t = val.toObject();
 			const int w = t.value(QStringLiteral("width")).toInt(0);
 			const QString u = t.value(QStringLiteral("url")).toString();
