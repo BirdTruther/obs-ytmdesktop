@@ -26,7 +26,9 @@ constexpr char kAppName[] = "OBS YTMDesktop Sync";
 constexpr char kAppVersion[] = "1.0.0";
 constexpr int kPollIntervalMs = 3000;
 constexpr int kMaxBackoffMs = 10000;
+#ifdef _WIN32
 constexpr int kMaxThumbnailBytes = 5 * 1024 * 1024;
+#endif
 
 #ifdef _WIN32
 QByteArray downloadBytesWinHttp(const QString &urlStr)
@@ -64,11 +66,10 @@ QByteArray downloadBytesWinHttp(const QString &urlStr)
 	}
 
 	const DWORD flags = (uc.nScheme == INTERNET_SCHEME_HTTPS) ? WINHTTP_FLAG_SECURE : 0;
-	HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", pathBuf, nullptr,
-						WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+	HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", pathBuf, nullptr, WINHTTP_NO_REFERER,
+						WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
 	if (hRequest) {
-		if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-				       WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+		if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
 		    WinHttpReceiveResponse(hRequest, nullptr)) {
 			DWORD avail = 0;
 			while (WinHttpQueryDataAvailable(hRequest, &avail) && avail > 0) {
@@ -211,7 +212,7 @@ void YtmdWorker::pollState()
 		QString bestThumb;
 		int bestWidth = -1;
 		const QJsonArray thumbs = video.value(QStringLiteral("thumbnails")).toArray();
-		for (const QJsonValue &val : thumbs) {
+		for (const QJsonValue val : thumbs) {
 			const QJsonObject t = val.toObject();
 			const int w = t.value(QStringLiteral("width")).toInt(0);
 			const QString u = t.value(QStringLiteral("url")).toString();
@@ -307,7 +308,8 @@ void YtmdWorker::startPairing()
 		authReq.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
 		authReq.setTransferTimeout(35000);
 
-		QNetworkReply *authReply = m_nam->post(authReq, QJsonDocument(authPayload).toJson(QJsonDocument::Compact));
+		QNetworkReply *authReply =
+			m_nam->post(authReq, QJsonDocument(authPayload).toJson(QJsonDocument::Compact));
 		connect(authReply, &QNetworkReply::finished, this, [this, authReply]() {
 			m_pairingInFlight = false;
 			authReply->deleteLater();
@@ -364,8 +366,7 @@ void YtmdClient::setConfig(const QString &host, int port, const QString &token)
 		m_snapshot.token = token;
 	}
 	QMetaObject::invokeMethod(
-		m_worker,
-		[w = m_worker, host, port, token]() { w->setConfig(host, port, token); },
+		m_worker, [w = m_worker, host, port, token]() { w->setConfig(host, port, token); },
 		Qt::QueuedConnection);
 }
 

@@ -1,1 +1,5 @@
-.run-format.zsh
+#!/usr/bin/env zsh
+# Upstream ships this as a symlink to .run-format.zsh; the GitHub API cannot
+# create symlinks, so exec the shared script with the formatter set directly.
+export FORMATTER_NAME=clang
+exec "${0:A:h}/.run-format.zsh" "$@"
