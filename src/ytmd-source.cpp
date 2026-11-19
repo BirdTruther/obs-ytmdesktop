@@ -152,8 +152,9 @@ struct YtmdSource {
 
 		// Title & Artist
 		const QString title = snap.track.valid
-			? snap.track.title
-			: (snap.statusText.isEmpty() ? QStringLiteral("Waiting for YTMDesktop...") : snap.statusText);
+					      ? snap.track.title
+					      : (snap.statusText.isEmpty() ? QStringLiteral("Waiting for YTMDesktop...")
+									   : snap.statusText);
 		QString subtitle;
 		if (snap.track.valid) {
 			subtitle = snap.track.author;
@@ -178,12 +179,14 @@ struct YtmdSource {
 		const int contentTop = pad;
 		const int contentHeight = std::max(20, h - pad * 2 - barAreaHeight);
 
-		const int titleY = contentTop + std::max(0, (contentHeight - (titleFm.height() + subFm.height() + 4)) / 2);
+		const int titleY =
+			contentTop + std::max(0, (contentHeight - (titleFm.height() + subFm.height() + 4)) / 2);
 
 		p.setFont(titleFont);
 		p.setPen(obsColorToQColor(textColor));
 		const QString elidedTitle = titleFm.elidedText(title, Qt::ElideRight, textWidth);
-		p.drawText(QRect(textLeft, titleY, textWidth, titleFm.height()), Qt::AlignLeft | Qt::AlignVCenter, elidedTitle);
+		p.drawText(QRect(textLeft, titleY, textWidth, titleFm.height()), Qt::AlignLeft | Qt::AlignVCenter,
+			   elidedTitle);
 
 		p.setFont(subFont);
 		p.setPen(obsColorToQColor(subTextColor));
@@ -197,14 +200,14 @@ struct YtmdSource {
 			const int barY = h - pad - barHeight;
 			const double duration = snap.track.durationSeconds;
 			const double ratio = (snap.track.valid && duration > 0.0)
-				? std::clamp(elapsedSec / duration, 0.0, 1.0)
-				: 0.0;
+						     ? std::clamp(elapsedSec / duration, 0.0, 1.0)
+						     : 0.0;
 
 			p.setFont(timeFont);
 			p.setPen(obsColorToQColor(subTextColor));
-			const QString timeStr = snap.track.valid
-				? QStringLiteral("%1 / %2").arg(formatTime(elapsedSec), formatTime(duration))
-				: QStringLiteral("0:00 / 0:00");
+			const QString timeStr = snap.track.valid ? QStringLiteral("%1 / %2").arg(formatTime(elapsedSec),
+												 formatTime(duration))
+								 : QStringLiteral("0:00 / 0:00");
 			const QFontMetrics timeFm(timeFont);
 			p.drawText(QRect(textLeft, barY - timeFm.height() - 3, textWidth, timeFm.height()),
 				   Qt::AlignRight | Qt::AlignVCenter, timeStr);
@@ -216,7 +219,8 @@ struct YtmdSource {
 
 			if (ratio > 0.0) {
 				const qreal fillW = std::max(static_cast<qreal>(barHeight), textWidth * ratio);
-				const QRectF fillRect(textLeft, barY, std::min(static_cast<qreal>(textWidth), fillW), barHeight);
+				const QRectF fillRect(textLeft, barY, std::min(static_cast<qreal>(textWidth), fillW),
+						      barHeight);
 				QPainterPath fillPath;
 				fillPath.addRoundedRect(fillRect, barHeight / 2.0, barHeight / 2.0);
 				p.fillPath(fillPath, obsColorToQColor(accentColor));
@@ -273,7 +277,8 @@ void ytmd_update(void *data, obs_data_t *settings)
 	src->textColor = static_cast<uint32_t>(obs_data_get_int(settings, kPropTextColor));
 	src->subTextColor = static_cast<uint32_t>(obs_data_get_int(settings, kPropSubTextColor));
 	src->fontSize = static_cast<int>(std::clamp<long long>(obs_data_get_int(settings, kPropFontSize), 8, 72));
-	src->cornerRadius = static_cast<int>(std::clamp<long long>(obs_data_get_int(settings, kPropCornerRadius), 0, 64));
+	src->cornerRadius =
+		static_cast<int>(std::clamp<long long>(obs_data_get_int(settings, kPropCornerRadius), 0, 64));
 
 	if (newHost != src->host || newPort != src->port || newToken != src->token) {
 		src->host = newHost;
@@ -367,8 +372,8 @@ obs_properties_t *ytmd_get_properties(void *data)
 			status = snap.statusText;
 		}
 	}
-	obs_property_t *statusProp = obs_properties_add_text(
-		props, kPropStatus, obs_module_text("PairingStatus"), OBS_TEXT_INFO);
+	obs_property_t *statusProp =
+		obs_properties_add_text(props, kPropStatus, obs_module_text("PairingStatus"), OBS_TEXT_INFO);
 	obs_property_text_set_info_type(statusProp, OBS_TEXT_INFO_NORMAL);
 	if (src) {
 		obs_data_t *s = obs_source_get_settings(src->source);
@@ -453,14 +458,15 @@ void ytmd_video_tick(void *data, float seconds)
 	const double elapsed = src->smoothElapsed;
 
 	const int currentSec = static_cast<int>(std::floor(elapsed));
-	const int progressPx = (snap.track.durationSeconds > 0.0)
-		? static_cast<int>((elapsed / snap.track.durationSeconds) * static_cast<double>(src->width))
-		: 0;
+	const int progressPx =
+		(snap.track.durationSeconds > 0.0)
+			? static_cast<int>((elapsed / snap.track.durationSeconds) * static_cast<double>(src->width))
+			: 0;
 
 	const bool dirty = (snap.version != src->lastRenderedVersion) ||
-		(src->settingsVersion != src->lastRenderedSettings) ||
-		(src->showProgressBar && snap.track.valid &&
-		 (currentSec != src->lastRenderedSecond || progressPx != src->lastProgressPx));
+			   (src->settingsVersion != src->lastRenderedSettings) ||
+			   (src->showProgressBar && snap.track.valid &&
+			    (currentSec != src->lastRenderedSecond || progressPx != src->lastProgressPx));
 
 	if (dirty) {
 		src->renderCard(snap, elapsed);
